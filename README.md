@@ -1,4 +1,4 @@
-# Planejamento_experimentos
+# Planejamento de Experimentos
 
 Tarefas da disciplina de Planejamento de experimentos
 
