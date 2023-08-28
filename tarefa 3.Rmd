@@ -1,0 +1,309 @@
+---
+title: "Tarefa 3"
+author: "Guilherme Vivan e Nicolas Hess"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  prettydoc::html_pretty:
+   theme: leonids
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r bibliotecas, include=FALSE}
+
+library(readr)
+library(agricolae)
+library(knitr)
+library(ggplot2)
+library(psych)
+library(tidyverse)
+library(RColorBrewer)
+library(car)
+library(cowplot)
+library(lmtest)
+library(emmeans)
+library(lsmeans)
+
+```
+
+
+# Questão 1
+
+## 1. Desenho do estudo, número de tratamentos, repetições, blocos;
+
+> É um estudo com delineamento em blocos completos casualizados, e, nesse caso, cada corredor é um bloco e cada trajeto para a "Second Base" é um tratamento. São três tratamentos, além de 22 repetições de cada um deles.
+
+```{r mostrando banco}
+
+banco1 <- read_csv2("tarefa3_q1.csv")
+
+kable(banco1)
+
+```
+
+
+## 2. Análise descritiva dos dados
+
+```{r analise descritiva num}
+
+descritivas <- describe(banco1[,2:4])
+descritivas <- descritivas[c("mean", "sd", "median", "min", "max", "range", "skew", "kurtosis")]
+kable(descritivas)
+
+```
+
+
+```{r analise descritiva grafico}
+
+banco1 <- banco1 %>%
+  gather(coluna, valor)
+
+
+ggplot(data = banco1[23:88, ], aes(x = coluna, y = valor, fill = coluna)) +
+  geom_boxplot(color = "black") +
+  stat_summary(geom = "point", fun = "mean", shape = 10, size = 3, color = "red") +
+  labs(x = "Trajetos de corrida", y = "Tempo(s)", title = "Trajeto vs. Tempo") +
+  theme_replace() + 
+  geom_jitter() +  
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(face = "bold"),
+        axis.text.y = element_text(face = "bold")) +
+  scale_fill_manual(values = brewer.pal(n = 3, name = "Accent")) +
+  geom_errorbar(stat = "boxplot", 
+                width = 0.2)
+  
+ 
+ggplot(data = banco1[23:88, ], aes(x = valor)) +
+  geom_histogram(fill = "steelblue", color = "black") +
+  geom_density(color = "red", fill = "red", alpha = 0.15) + 
+  facet_wrap(~ coluna, scales = "free", strip.position = "bottom") +
+  labs(x = "Tempo", y = "Frequência", title = "Histogramas de cada trajeto") +
+  theme_replace() +
+  theme(strip.placement = "outside",
+        strip.text = element_text(hjust = 0.5),    
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(face = "bold"),
+        axis.text.y = element_text(face = "bold")) 
+
+
+```
+
+## 3. Utilize o modelo adequado de ANOVA, descreva e interprete os resultados (considere α = 0,05)
+
+```{r anova}
+
+banco_anova1 <- read.csv2("tarefa3_q1.csv")
+
+banco_anova1 <- banco_anova1 %>%
+  gather(trajeto, tempo, -Player) 
+
+banco_anova1 <- banco_anova1 %>% arrange(sample(n()))
+banco_anova1 <- banco_anova1 %>% arrange(Player)
+banco_anova1$Player <- as.factor(banco_anova1$Player)
+
+anova_1 <- aov(tempo ~ trajeto + Player, data = banco_anova1)
+summary(anova_1)
+
+
+```
+
+> Considerando um $\alpha = 0.05$, ao realizar a ANOVA, podemos dizer que tanto o tratamento (diferentes trajetos), como também os blocos (cada corredor) tem um efeito significativo, com *p-valor* de $0.004$ e < $2 x 10^{-16}$, respectivamente. Dessa forma, podemos afirmar que existe uma diferença significativa entre as médias dos grupos. 
+
+```{r lm e cv 1}
+
+lm_1 <- lm(tempo ~ trajeto + Player, banco_anova1)
+summary(lm_1)
+
+cv.model(anova_1)
+
+```
+
+> Também podemos dizer que há um $R^2$ bem alto de $0.93$, além de coeficiente de variação de $1.56$.
+
+
+## 4. Avalie se os pressupostos do modelo foram atendidos.
+
+> Para que a ANOVA sejá válida, vamos checar seus pressupostos, tanto de normalidade dos resíduos, quanto de homogeneidade das variâncias como também da independência entre os erros.
+
+```{r pressupostos}
+
+plot(anova_1, which = 1)
+
+
+```
+
+> Graficamente, não conseguimos encontrar um padrão de "funil", que poderia indicar heterocedasticidade das variâncias dos resíduos.
+
+```{r pressupostos 2}
+leveneTest(tempo ~ trajeto, data = banco_anova1, center= mean)
+
+leveneTest(tempo ~ trajeto, data = banco_anova1, center=median)
+
+
+```
+
+> Podemos usar os testes de Levene e Brown-Forsythe. Ambos resultados indicam que não podemos rejeitar a hipótese nula de homogeneidade.
+
+```{r pressupostos 3}
+
+residuos <- resid(anova_1)
+
+qqplot_1 <- ggplot(data.frame(residuos), aes(sample = residuos)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(title = "Q-Q Plot", x = "Quantil teórico", y = "Quantil observado") + 
+  theme_replace() +
+  theme(  
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(face = "bold"),
+        axis.text.y = element_text(face = "bold")) 
+
+hist_1 <- ggplot(data.frame(residuos), aes(x = residuos)) +
+  geom_histogram(fill = "lightblue", color = "black") +
+  labs(x = "Resíduos", y = "Frequência", title = "Histograma dos Resíduos") + 
+  geom_density(color = "red") +
+  theme_replace() +
+  theme(  
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(face = "bold"),
+        axis.text.y = element_text(face = "bold"))
+
+plot_grid(qqplot_1, hist_1)
+
+```
+
+> Para a normalidade dos resíduos, graficamente podemos ver tanto pelo qqplot quanto pelo histograma que não parece haver uma normalidade dos resíduos.
+
+```{r pressupostos 4}
+
+shapiro.test(residuos)
+
+
+```
+
+> Pelo teste de Shapiro-Wilk, podemos afirmar que não há de fato normalidade. Mas, como é uma amostra relativamente pequena, podemos relevar uma flutuação pequena como essa.
+
+```{r pressupostos 5}
+
+dwtest(lm_1)
+
+```
+
+> Observamos que os erros são independentes.
+
+## 5. Realize a complementação adequada. 
+
+```{r complementação}
+
+
+LSD.test(anova_1, "trajeto", console=T, alpha = 0.05)
+
+HSD.test(anova_1, 'trajeto', alpha = 0.05, console = TRUE, group=F)
+
+plot(TukeyHSD(anova_1, which = 1))
+
+```
+
+> Para analisarmos qual grupo tem uma média significativamente diferente dos demais, analisamos o teste de LSD (Least Significant Difference), o de HSD (Honesty Significant Difference) e seu gráfico.
+
+> Pelos resultados, percebemos que a média de tempo entre os trajetos "Narrow Angle"  e "Round Out" não possui uma diferença significativa. Isto fica claro pelo gráfico, cuja barra inclui o valor $0$. Assim, podemos dizer que o trajeto "Wide Angle" demanda um tempo médio menor para ser feito.
+
+## 6. Qual a sua recomendação para Woodward?
+
+
+# Questão 2
+
+## 1. Desenho do estudo, número de tratamentos, repetições, blocos; 
+
+```{r mostrando banco 2}
+
+banco2 <- read_csv2("tarefa3_q2.csv")
+kable(banco2)
+
+```
+
+> Este estudo tem um delineamento de bloco incompleto. Dividimos em 9 tratamentos, com 3 repetições, e cada repetição contém os 9 tratamentos. Os blocos são os 9 julgadores, dividindo estes 9 blocos nas 3 repetições.
+
+## 2. Considerando a dimensão 𝜆 para cada par de tratamento, esse delineamento é balanceado ou parcialmente balanceado?
+
+> Esse delineamento é parcialmente balanceado, pois nem todos pares se repetem, ou seja, temos que $\lambda$ é igual a 0 ou 1, dependendo do par. Por exemplo, o par 1 e 2 se repete uma vez, já o par 1 e 6 não aparece em nenhum bloco.
+
+## 3. Análise descritiva dos dados
+
+```{r analise descritiva 2 num }
+
+banco2$Julgador <- as.factor(banco2$Julgador)
+banco2$Receita <- as.factor(banco2$Receita)
+banco2$rept <- as.factor((c(rep(1, 9), rep(2, 9), rep(3, 9))))
+
+
+descritivas2 <- describe(banco2$Nota)
+
+descritivas2 <- descritivas2[c("mean", "sd", "median", "min", "max", "range", "skew", "kurtosis")]
+kable(descritivas2)
+
+```
+
+```{r analise descritiva 2 graf}
+
+ggplot(data = banco2, aes(x = Receita, y = Nota, fill = Receita))+
+  geom_boxplot(color = "black") +
+  stat_summary(geom = "point", fun = "mean", shape = 10, size = 3, color = "white") +
+  labs(x = "Receitas", y = "Notas", title = "Nota x Receita") +
+  theme_replace() + 
+  geom_jitter() +  
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(face = "bold"),
+        axis.text.y = element_text(face = "bold")) +
+  scale_fill_brewer(palette = "Paired") +
+  geom_errorbar(stat = "boxplot", 
+                width = 0.4)
+
+```
+
+## 4. Utilize o modelo adequado de ANOVA, descreva e interprete os resultados (considere α = 0,05) – Análise Intrabloco ou com recuperação interbloco? 
+
+```{r anova 2}
+
+lm_2 <- lm(terms(Nota ~ rept/Julgador + Receita, keep_order = TRUE), data = banco2)
+summary(lm_2)
+
+anova(lm_2)
+
+```
+
+>Pela ANOVA, temos que há uma diferença significativa entre as receitas, considerando $\alpha = 0.05$ (temos um p-valor de $0.02458$).
+
+## 5. Assuma que os pressupostos do modelo foram atendidos, realize a complementação adequada.
+
+```{r complementacao 2}
+
+lsmeans(lm_2, pairwise ~ Receita, adjust = ("tukey"), data = banco2)
+
+```
+
+
+> Usando a função "lsmeans", que calcula médias dos mínimos quadrados para fatores em um modelo linear, assim como os contrastes entre eles. Para calcular os valores críticos e os p-valores, usamos o teste HSD de Tukey.
+
+
+## 6. Qual a sua indicação de receita para maior aceitabilidade do alimento em questão?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

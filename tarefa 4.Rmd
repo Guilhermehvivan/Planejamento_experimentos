@@ -1,0 +1,222 @@
+---
+title: "Tarefa 4"
+author: "Guilherme Vivan e Nicolas Hess"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    fig_width: 10
+    fig_height: 7
+---
+
+
+
+```{css, echo = FALSE}
+body {
+  font-family: "Times New Roman", serif;
+  font-size: 14pt;
+  text-align: justify;
+}
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r biblioteca, include=FALSE}
+
+library(readr)
+library(kableExtra)
+library(lmtest)
+library(lsmeans)
+
+```
+
+
+> O gerente de marketing de um banco suspeita de que o número de vendas de um determinado produto é influenciado pela estratégia de venda utilizada e pela taxa de juros associada a esse produto. Ele selecionou três taxas de juros – 10%, 15% e 20%– e três tipos de estratégia (A, B e C). Ao longo de 4 dias foram computadas quantas vendas foram realizadas desse produto utilizando-se cada uma das combinações de estratégia e taxa de juros. Como os diferentes dias podem acarretar em uma variabilidade adicional, os mesmos foram adicionados ao experimento como blocos. Os dados estão descritos abaixo:
+
+```{r dados}
+
+dados <- read.csv("tarefa4.csv")
+attach(dados)
+
+dados$Dias <- as.factor(dados$Dias)
+dados$Estrategia <- as.factor(dados$Estrategia)
+
+kable(dados)
+
+```
+
+## (a) Descreva o experimento (delineamento, fatores de tratamentos e seus níveis, repetições):
+
+Este experimento fatorial cruzado possui um delineamento de blocos casualizados. O primeiro fator de tratamento é a Estratégia (níveis: A, B e C), o segundo é a Taxa de Juros (níveis: 10%, 15% e 20%) e o terceiro é o Dia/Bloco (níveis: 1, 2, 3 e 4). São 4 repetições de cada combinação entre cada Estratégia com cada Taxa de Juros.
+
+## (b) Apresente e teste as hipóteses apropriadas, usando a análise de variância com $\alpha$ = 5%.
+
+A partir da descrição anterior, temos o modelo: 
+$$y_{ijk} = \mu + \alpha_i + \beta_j + \alpha\beta_{ij} + R_k + \epsilon_{ijk}$$
+
+Temos as seguintes hipóteses nulas:
+
+$H_0$: a mudança da Estratégia gera o mesmo efeito sobre a mudança dos três diferentes níveis da Taxa , assim como a mudança na Taxa gera o mesmo efeito sobre a mudança dos três níveis diferentes da Estratégia;
+
+$H_0$: a quantidade média de produtos vendidos esperada não muda conforme a mudança de nível da Estratégia;
+
+$H_0$: a quantidade média de produtos vendidos esperada não muda conforme a mudança de nível da Taxa.
+
+Em outras palavras:
+
+$H_0$: $\alpha\beta_{ij} = 0$ ;
+
+$H_0$: $\alpha_i = 0$ ;
+
+$H_0$: $\beta_j = 0$ 
+
+Vamos utilizar a ANOVA para fazer estes testes.
+
+```{r questao b}
+
+anova <- aov(Vendas ~ as.factor(Dias) + (Estrategia)*as.factor(Juros))
+summary(anova)
+
+```
+
+Podemos observar pelo resultado da ANOVA que temos um *p*-valor significativo considerando um $\alpha = 0.05$ para as variáveis Estratégia e Taxa de Juros e também para a sua interação. Os blocos não são significativos.
+
+## (c) Analise graficamente a interação.
+
+
+```{r questao c, fig.align='center'}
+
+par(mfrow=c(1, 2))
+par(mar = c(4, 3, 4, 3))
+
+
+interaction.plot(Estrategia, Juros, Vendas, col = c("red", "darkblue", "gray30"), lty = 5)
+
+interaction.plot(Juros, Estrategia, Vendas, col = c("red", "darkblue", "gray30"), lty = 5)
+
+```
+
+Fazendo uma análise gráfica, percebemos que, no primeiro gráfico, os traçados de cada Taxa não estão paralelos, o que leva a crer que o efeito da Estratégia depende dos Juros. Podemos afirmar que há um efeito acentuado em 15%.
+
+Já no segundo gráfico, observamos que, assim como antes, os traçados de cada Estratégia não estão paralelos, e dessa forma entendemos que o efeito dos Juros depende de Estratégia. Percebemos que a quantidade de vendas, no geral, diminui conforme os Juros aumentam, sendo a queda mais acentuada na Estratégia B.
+
+Quanto à interação, percebemos que os traçados se cruzam em ambos os gráficos, o que indica, de fato, a interação.
+
+## (d) Analise os resíduos deste experimento e suas pressuposições.
+
+```{r questao d, fig.align='center'}
+
+par(mfrow=c(1,2))
+par(mar = c(4, 3, 4, 3))
+
+plot(anova, which = c(1, 2))
+
+
+```
+
+Observamos pelo primeiro gráfico que temos a homocedasticidade da variância dos resíduos, já que os pontos estão dispersos de forma a não apresentar um padrão. Podemos confirmar pelo teste de Breusch-Pagan:
+
+```{r bp}
+
+bptest(anova)
+
+```
+
+
+O segundo gráfico mostra a normalidade dos resíduos já que os pontos estão próximos da linha. Podemos confirmar pelo teste de Shapiro-Wilk:
+
+```{r sw}
+
+shapiro.test(anova$residuals)
+
+```
+
+## (e) Faça as devidas complementações da análise e conclua.
+
+Agora vamos decompor os fatores.
+
+Primeiramente, para Estratégia dentro de Juros:
+
+```{r decomposicao 1}
+
+decomp1 <- aov(Vendas ~ as.factor(Dias) + as.factor(Juros)/Estrategia)
+
+lista_juros <- list("10%" = seq(1, by = 3, length.out = 2),
+                         "15%" = seq(2, by = 3, length.out = 2),
+                         "20%" = seq(3, by = 3, length.out = 2))
+summary(decomp1, split = list("as.factor(Juros):Estrategia" = lista_juros))
+
+```
+
+Decompondo os Juros, temos que apenas o nível de 15% é significativo. Ou seja, só há uma diferença significativa entre as Estratégias com os Juros em 15%.
+
+```{r comparacao 1} 
+
+lsmeans(anova, pairwise ~ Estrategia|as.factor(Juros))
+
+```
+
+Entre as comparações de Estratégias para cada Juro (lembrando que apenas o nível de 15% é significativo), temos como significativa apenas a comparação de A e B, além de A e C. Isso se dá por causa dos baixos valores de vendas na Estratégia A, como podemos ver na coluna *lsmeans*.
+
+E agora, vamos decompor Juros dentro da Estratégia:
+
+```{r decomposicao 2}
+
+decomp2 <- aov(Vendas ~ as.factor(Dias) + Estrategia/as.factor(Juros))
+
+lista_estrategia <- list("A" = seq(1, by = 3, length.out = 2),
+                         "B" = seq(2, by = 3, length.out = 2),
+                         "C" = seq(3, by = 3, length.out = 2))
+
+summary(decomp2, split = list("Estrategia:as.factor(Juros)" = lista_estrategia))
+
+```
+
+Decompondo a Estratégia, temos que os seus 3 níveis são significativos. Ou seja, há uma diferença significativa entre os Juros para qualquer que seja a Estratégia.
+
+```{r comparacao 2}
+
+lsmeans(anova, list(poly ~ as.factor(Juros)|Estrategia))
+
+```
+
+Agora testamos os efeitos lineares ou quadráticos possíveis para cada Estratégia. Nesse caso, os efeitos significativos foram lineares para B e C e quadrático para A.
+
+```{r efeitos lineares, fig.align='center'}
+
+par(mfrow=c(1,3))
+par(mar = c(4, 3, 4, 3))
+
+#########
+modelo_1 <- print(lm(Vendas ~ Juros + I(Juros^2), data = subset(dados, dados$Estrategia == "A")))
+
+plot(dados$Juros, dados$Vendas, pch = 16, col = "blue", xlab = "Juros", ylab = "Vendas", main = "Ajuste da Regressão - A")
+
+curve(predict(modelo_1, newdata = data.frame(Juros = x)), from = 10, to = 20, col = "red", add = TRUE, lwd = 2)
+
+#########
+modelo_2 <- print(lm(Vendas ~ Juros, data = subset(dados, dados$Estrategia == "B")))
+
+plot(dados$Juros, dados$Vendas, pch = 16, col = "blue", xlab = "Juros", ylab = "Vendas", main = "Ajuste da Regressão - B")
+
+abline(modelo_2, col = "red", lwd = 2)
+
+#########
+modelo_3 <- print(lm(Vendas ~ Juros, data = subset(dados, dados$Estrategia == "C")))
+
+plot(dados$Juros, dados$Vendas, pch = 16, col = "blue", xlab = "Juros", ylab = "Vendas", main = "Ajuste da Regressão - C")
+
+abline(modelo_3, col = "red", lwd = 2)
+
+```
+
+Evidentemente, como temos coeficientes negativos para o $\beta_1$ dos modelos lineares, temos uma reta inclinada indicando que conforme aumentamos os Juros, diminuímos as vendas. Para a regressão do efeito quadrático, temos essa parábola mostrando que a quantidade maior de vendas foi com Juros iguais a 10%.
+
+Concluindo, temos que, como a Taxa de Juros de 10% é melhor, então bastaria escolher qual das três Estratégias é melhor, ainda que não haja uma diferença significativa entre elas com esses Juros, mas, comparando estes últimos três gráficos, para maximizar suas vendas, escolheríamos a Estratégia B.
